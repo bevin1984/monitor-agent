@@ -1,0 +1,71 @@
+# monitor-agent 配置参考（全部字段 + 说明）。
+# 实际生效配置为 /etc/monitor-agent/config.toml。
+
+# ---- 服务端连接 ----
+[server]
+# 接收数据的 HTTP/HTTPS 地址
+url            = "https://your-receiver.example.com/data/server"
+# 认证 KEY，通过下方请求头带出；或用环境变量 MONITOR_AGENT_KEY 注入
+key            = "CHANGE_ME"
+# 携带 key 的请求头名称（body 不含 key）
+key_header     = "X-Monitor-Key"
+# 信任的企业/自签 CA 的 PEM 文件路径；留空则用内置公共 CA（Mozilla 根证书）
+ca_bundle_path = ""
+# 应急跳过 TLS 证书校验（不推荐，仅内网自签应急）
+tls_skip_verify = false
+
+# ---- 采集与标识 ----
+[agent]
+# 采集推送频率（分钟）
+interval_minutes = 1
+# 服务器自定义标识，随每条上报带出，便于接收端区分主机；为空时回退 hostname
+# 也可用环境变量 MONITOR_AGENT_LABEL 注入
+label = ""
+
+# ---- HTTP 客户端（代理由 HTTPS_PROXY/HTTP_PROXY/NO_PROXY 环境变量控制）----
+[network_client]
+connect_timeout_secs = 5    # 连接超时
+request_timeout_secs = 15   # 整体请求超时
+max_retries       = 3       # 瞬态错误重试次数（4xx 不重试）
+retry_base_delay_ms = 500   # 指数退避基数：500ms×2^n
+
+# ---- 失败重传队列（内存环形缓冲，不落盘）----
+[retry_queue]
+enabled         = true      # 服务端短暂不可达时排队，恢复后补传
+max_items       = 60        # 约等于 60 个周期（1 分钟频率下 ≈ 1 小时）
+flush_batch_size = 10       # 恢复后每次补传条数
+
+# ---- 指标开关 ----
+[collect]
+cpu         = true
+memory      = true
+load        = true
+process     = true
+connections = true
+host        = true
+
+# 磁盘空间：自动发现所有真实块设备挂载点
+[collect.disks]
+enabled            = true
+# 挂载点黑名单（glob，如 ["/var/lib/docker/*", "/mnt/backup"]）
+mountpoint_blocklist = []
+# 文件系统类型黑名单（精确匹配，伪文件系统默认已排除）
+fstype_blocklist = [
+  "proc", "sysfs", "devtmpfs", "devfs", "tmpfs", "tmp", "overlay", "squashfs",
+  "cgroup", "cgroup2", "mqueue", "hugetlbfs", "autofs", "rpc_pipefs",
+  "fuse.gvfsd-fuse", "none",
+]
+
+# 磁盘读写：默认统计 /sys/block 下全部顶层块设备（含 dm/md/nvme/sd/vd/xvd）
+[collect.disk_io]
+enabled         = true
+device_blocklist = ["loop*", "ram*"]
+
+# 网络带宽：自动采集所有非 lo 网卡
+[collect.network]
+enabled            = true
+interface_blocklist = ["lo"]   # 可加 "docker0", "veth*", "br-*"
+
+# ---- 日志（输出到 stdout，systemd 自动收进 journald）----
+[logging]
+level = "warn"   # 默认安静：error|warn|info|debug|trace；RUST_LOG 环境变量可覆盖

@@ -1,0 +1,52 @@
+# monitor-agent 活动配置。修改后需 `systemctl restart monitor-agent`。
+# 完整字段说明见 /etc/monitor-agent/config.example.toml。
+
+[server]
+url            = "https://your-receiver.example.com/data/server"
+key            = "CHANGE_ME"     # 部署后必须改为真实 key（或用 MONITOR_AGENT_KEY 环境变量注入）
+key_header     = "X-Monitor-Key" # KEY 通过此请求头带出，body 不含 key
+ca_bundle_path = ""              # 企业/自签 CA 的 PEM 路径；留空=用内置公共 CA
+tls_skip_verify = false          # 应急跳过证书校验（不推荐）
+
+[agent]
+interval_minutes = 1
+label = ""                        # 服务器自定义标识；为空时回退 hostname
+
+[network_client]
+connect_timeout_secs = 5
+request_timeout_secs = 15
+max_retries       = 3
+retry_base_delay_ms = 500
+
+[retry_queue]
+enabled         = true
+max_items       = 60
+flush_batch_size = 10
+
+[collect]
+cpu         = true
+memory      = true
+load        = true
+process     = true
+connections = true
+host        = true
+
+[collect.disks]
+enabled            = true
+mountpoint_blocklist = []
+fstype_blocklist = [
+  "proc", "sysfs", "devtmpfs", "devfs", "tmpfs", "tmp", "overlay", "squashfs",
+  "cgroup", "cgroup2", "mqueue", "hugetlbfs", "autofs", "rpc_pipefs",
+  "fuse.gvfsd-fuse", "none",
+]
+
+[collect.disk_io]
+enabled         = true
+device_blocklist = ["loop*", "ram*"]
+
+[collect.network]
+enabled            = true
+interface_blocklist = ["lo"]
+
+[logging]
+level = "warn"   # error|warn|info|debug|trace；RUST_LOG 可覆盖

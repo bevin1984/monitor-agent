@@ -1,0 +1,71 @@
+[package]
+name = "monitor-agent"
+version = "0.1.2"
+edition = "2021"
+description = "Lightweight server resource monitoring agent that collects metrics and pushes JSON to a receiver."
+license = "MIT"
+authors = ["bevin <bevin1984@gmail.com>"]
+homepage = "https://github.com/bevin1984/monitor-agent"
+repository = "https://github.com/bevin1984/monitor-agent"
+
+[dependencies]
+ureq = { version = "2", default-features = false, features = ["tls", "json"] }
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+toml = "0.8"
+clap = { version = "4", features = ["derive"] }
+log = "0.4"
+env_logger = "0.11"
+anyhow = "1"
+libc = "0.2"
+globset = "0.4"
+signal-hook = "0.3"
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+strip = "symbols"
+panic = "abort"
+
+# ===== RPM 打包配置（cargo-generate-rpm）=====
+[package.metadata.generate-rpm]
+assets = [
+    { source = "target/release/monitor-agent", dest = "/usr/bin/monitor-agent", mode = "755" },
+    { source = "assets/monitor-agent.service", dest = "/usr/lib/systemd/system/monitor-agent.service", mode = "644" },
+    { source = "assets/config.toml", dest = "/etc/monitor-agent/config.toml", mode = "640", config = "noreplace" },
+    { source = "assets/config.example.toml", dest = "/etc/monitor-agent/config.example.toml", mode = "644" },
+]
+post_install_script = '''if ! id -u monitor-agent >/dev/null 2>&1; then useradd --system --no-create-home --shell /usr/sbin/nologin monitor-agent; fi
+chown -R monitor-agent:monitor-agent /etc/monitor-agent
+chmod 640 /etc/monitor-agent/config.toml
+systemctl daemon-reload
+systemctl enable monitor-agent
+systemctl restart monitor-agent'''
+pre_uninstall_script = '''if [ "$1" = "0" ]; then systemctl --no-reload disable --now monitor-agent >/dev/null 2>&1 || :; fi'''
+post_uninstall_script = '''if [ "$1" = "0" ]; then systemctl daemon-reload || :; fi'''
+
+[package.metadata.generate-rpm.requires]
+systemd = ">= 239"
+
+# ===== DEB 打包配置（cargo-deb）=====
+[package.metadata.deb]
+maintainer = "bevin <bevin1984@gmail.com>"
+section = "utils"
+priority = "optional"
+depends = "libc6, systemd"
+maintainer-scripts = "debian/scripts"
+assets = [
+    ["target/release/monitor-agent", "usr/bin/monitor-agent", "755"],
+    ["assets/config.toml", "etc/monitor-agent/config.toml", "640"],
+    ["assets/config.example.toml", "etc/monitor-agent/config.example.toml", "644"],
+]
+
+[package.metadata.deb.systemd-units]
+unit-scripts = "assets"
+unit-name = "monitor-agent"
+enable = true
+start = true
+restart-after-upgrade = true
+stop-on-upgrade = true
